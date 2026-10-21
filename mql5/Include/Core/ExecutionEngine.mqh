@@ -130,7 +130,7 @@ public:
             }
          } else if(m_posInfo.PositionType() == POSITION_TYPE_SELL) {
             double newSl = NormalizeDouble(current + trail, digits);
-            if(curSl == 0 || newSl < curSl && newSl < m_posInfo.PriceOpen()) {
+            if(curSl == 0 || (newSl < curSl && newSl < m_posInfo.PriceOpen())) {
                m_trade.PositionModify(ticket, newSl, m_posInfo.TakeProfit());
             }
          }

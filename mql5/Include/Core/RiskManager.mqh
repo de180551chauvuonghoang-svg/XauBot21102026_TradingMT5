@@ -215,4 +215,5 @@ public:
    void ResetHalt()               { m_halted = false; m_consecutiveLosses = 0; Print("[RiskManager] Halt đã được reset thủ công."); }
    bool IsHalted() const          { return m_halted; }
    int  GetConsecutiveLosses() const { return m_consecutiveLosses; }
+   double GetDailyStartingEquity() const { return m_dailyStartEquity; }
 };
