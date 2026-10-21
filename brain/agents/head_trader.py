@@ -97,16 +97,38 @@ class HeadTrader:
                 continue
 
             # 4. Tính toán lot size dựa trên equity thật và khoảng cách SL
-            equity = current_account_state.get("equity", 10000.0)
+            equity = 500.0
+            if current_account_state and current_account_state.get("equity", 0) > 0:
+                equity = current_account_state["equity"]
+            else:
+                try:
+                    import MetaTrader5 as mt5
+                    acct = mt5.account_info()
+                    if acct and acct.equity > 0:
+                        equity = acct.equity
+                except Exception:
+                    pass
+
             sl_dist = abs(signal["price"] - signal["sl"])
-            risk_cash = equity * 0.005  # 0.5% rủi ro
-            
-            # Ước lượng lot size tương đối an toàn
-            calculated_lot = round(max(0.01, min(1.0, risk_cash / max(10.0, sl_dist * 100))), 2)
+            risk_cash = equity * 0.005  # 0.5% rủi ro (ví dụ $500 -> $2.5)
+
+            # Tính toán tổn thất tương ứng trên 1.0 lot chuẩn
+            if "XAU" in symbol or "GOLD" in symbol:
+                loss_per_lot = sl_dist * 100.0  # 100 oz contract size
+            elif "JPY" in symbol:
+                pips = sl_dist / 0.01
+                loss_per_lot = max(10.0, pips * 6.5)
+            else:
+                pips = sl_dist / 0.0001
+                loss_per_lot = max(10.0, pips * 10.0)
+
+            raw_lot = risk_cash / loss_per_lot
             size_factor = self.risk_officer.get_size_factor()
-            final_lot = round(calculated_lot * size_factor, 2)
+            final_lot = round(raw_lot * size_factor, 2)
             if final_lot < 0.01:
                 final_lot = 0.01
+            elif final_lot > 0.10:
+                final_lot = 0.10  # Giới hạn an toàn tuyệt đối cho tài khoản $500
 
             signal["lots"] = final_lot
             signal["magic"] = 1004

@@ -93,11 +93,83 @@ class MT5Bridge:
             "consumed": False,
         }
 
+        # Thử thực thi lệnh trực tiếp qua MT5 Python API nếu MT5 đang kết nối
+        executed_direct = self._execute_order_direct(unified_signal)
+        if executed_direct:
+            unified_signal["consumed"] = True
+
         existing.append(unified_signal)
         content = json.dumps(existing, indent=2)
         self._write_file(self._signal_file, content)
         self._write_file(self._local_dir / "signals.json", content)
         logger.info(f"Signal queued → {unified_signal['symbol']} {unified_signal['type']} | lots={unified_signal['lot']} | conf={unified_signal['confidence']:.0%}")
+
+    def _execute_order_direct(self, sig: dict) -> bool:
+        """Thực thi lệnh trực tiếp trên MT5 bằng tài khoản đang kết nối."""
+        try:
+            import MetaTrader5 as mt5
+            if not mt5.terminal_info():
+                return False
+
+            symbol = sig["symbol"]
+            # Kiểm tra xem đã có position nào đang mở cho symbol này với magic 1004 chưa
+            open_positions = mt5.positions_get(symbol=symbol)
+            if open_positions:
+                for p in open_positions:
+                    if p.magic == sig.get("magic", 1004):
+                        logger.info(f"Bỏ qua mở lệnh {symbol}: Đã có vị thế ticket #{p.ticket} đang mở.")
+                        return False
+
+            mt5.symbol_select(symbol, True)
+            tick = mt5.symbol_info_tick(symbol)
+            sym_info = mt5.symbol_info(symbol)
+            if not tick or not sym_info:
+                logger.error(f"Không lấy được tick/info cho {symbol}")
+                return False
+
+            is_buy = (sig["type"].upper() == "BUY")
+            order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+            price = tick.ask if is_buy else tick.bid
+
+            # Xác định filling mode phù hợp với sàn
+            filling = mt5.ORDER_FILLING_FOK
+            if sym_info.filling_mode & 2 != 0:
+                filling = mt5.ORDER_FILLING_IOC
+            elif sym_info.filling_mode & 1 != 0:
+                filling = mt5.ORDER_FILLING_FOK
+            else:
+                filling = mt5.ORDER_FILLING_RETURN
+
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "volume": float(sig["lot"]),
+                "type": order_type,
+                "price": float(price),
+                "sl": float(sig["stop_loss"]),
+                "tp": float(sig["take_profit1"]),
+                "deviation": 20,
+                "magic": int(sig.get("magic", 1004)),
+                "comment": f"BrainAI:{sig.get('strategy', 'AI')[:10]}",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": filling,
+            }
+
+            result = mt5.order_send(request)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                logger.info(
+                    f"🎯 MT5 DIRECT ORDER EXECUTED THÀNH CÔNG! Ticket #{result.order} | "
+                    f"{symbol} {sig['type']} {sig['lot']} lots @ {price:.5f} | SL={sig['stop_loss']} | TP={sig['take_profit1']}"
+                )
+                return True
+            else:
+                ret = result.retcode if result else "None"
+                comment = result.comment if result else mt5.last_error()
+                logger.warning(f"MT5 order_send trả về code={ret}: {comment}")
+                return False
+        except Exception as e:
+            logger.error(f"Lỗi khi thực thi lệnh trực tiếp qua MT5 API: {e}")
+            return False
 
     def send_news_blackout(self, events: list):
         """Gửi danh sách sự kiện tin tức vĩ mô cần blackout giao dịch."""

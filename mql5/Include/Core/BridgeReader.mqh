@@ -158,6 +158,70 @@ public:
       }
 
       Print("[BRIDGE] Nhận được tín hiệu mới từ Python Brain. Tiến hành kiểm tra và thực thi...");
+
+      string sym = ExtractJsonString(content, "symbol");
+      string typeStr = ExtractJsonString(content, "type");
+      double sl = ExtractJsonDouble(content, "stop_loss");
+      double tp = ExtractJsonDouble(content, "take_profit1");
+      double lot = ExtractJsonDouble(content, "lot");
+      ulong magic = (ulong)ExtractJsonDouble(content, "magic");
+      if(magic == 0) magic = MAGIC_BRAIN_AI;
+
+      if(sym != "" && (typeStr == "BUY" || typeStr == "SELL")) {
+         SignalPacket pkt;
+         pkt.symbol = sym;
+         pkt.type = (typeStr == "BUY") ? SIGNAL_BUY : SIGNAL_SELL;
+         pkt.timeframe = PERIOD_M15;
+         pkt.regime = REGIME_RANGE;
+         pkt.entryPrice = (typeStr == "BUY") ? SymbolInfoDouble(sym, SYMBOL_ASK) : SymbolInfoDouble(sym, SYMBOL_BID);
+         pkt.stopLoss = sl;
+         pkt.takeProfit1 = tp;
+         pkt.takeProfit2 = 0.0;
+         pkt.confidence = 0.70;
+         pkt.strategyName = "BrainAI";
+         pkt.comment = "BrainAI:Auto";
+         pkt.signalTime = TimeCurrent();
+         pkt.magic = magic;
+
+         double finalVol = (lot > 0) ? lot : risk.CalcLot(sym, pkt.entryPrice, pkt.stopLoss);
+         if(finalVol > 0) {
+            PrintFormat("[BRIDGE] Vào lệnh từ Brain: %s %s %.2f lot | SL=%.5f | TP=%.5f", sym, typeStr, finalVol, sl, tp);
+            exec.OpenOrder(pkt, finalVol);
+         }
+      }
+   }
+
+   string ExtractJsonString(const string json, const string key) {
+      string search = "\"" + key + "\": \"";
+      int start = StringFind(json, search);
+      if(start < 0) {
+         search = "\"" + key + "\":\"";
+         start = StringFind(json, search);
+         if(start < 0) return "";
+         start += StringLen(search);
+      } else {
+         start += StringLen(search);
+      }
+      int end = StringFind(json, "\"", start);
+      if(end < 0) return "";
+      return StringSubstr(json, start, end - start);
+   }
+
+   double ExtractJsonDouble(const string json, const string key) {
+      string search = "\"" + key + "\": ";
+      int start = StringFind(json, search);
+      if(start < 0) {
+         search = "\"" + key + "\":";
+         start = StringFind(json, search);
+         if(start < 0) return 0.0;
+         start += StringLen(search);
+      } else {
+         start += StringLen(search);
+      }
+      int end = StringFind(json, ",", start);
+      if(end < 0) end = StringFind(json, "}", start);
+      if(end < 0) return 0.0;
+      return StringToDouble(StringSubstr(json, start, end - start));
    }
 
    //+---------------------------------------------------------------+
