@@ -6,3 +6,5 @@ requests>=2.31
 feedparser>=6.0
 pyzmq>=25.0
 python-dotenv>=1.0
+openai>=1.0
+groq>=0.9.0

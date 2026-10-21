@@ -29,14 +29,25 @@ try:
 except ImportError:
     print("[WARN] python-dotenv chưa cài. Chạy: pip install python-dotenv")
 
+# Đảm bảo console Windows hỗ trợ UTF-8 cho Tiếng Việt
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Setup logging trước khi import các module khác
+_journal_dir = Path(__file__).parent / "journal"
+_journal_dir.mkdir(exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("journal/brain.log", mode="a", encoding="utf-8"),
+        logging.FileHandler(_journal_dir / "brain.log", mode="a", encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("Brain")
@@ -52,6 +63,7 @@ def parse_args():
         help="Chế độ giao dịch (mặc định: demo)"
     )
     parser.add_argument("--symbols", default=None, help="Override danh sách symbol (csv)")
+    parser.add_argument("--once", action="store_true", help="Chỉ chạy 1 chu kỳ rồi dừng (dùng cho test/cron)")
     parser.add_argument("--debug", action="store_true", help="Bật debug logging")
     return parser.parse_args()
 
@@ -133,6 +145,10 @@ def main():
                 raise
             except Exception as e:
                 logger.error(f"Lỗi chu kỳ #{cycle}: {e}", exc_info=True)
+
+            if args.once:
+                logger.info("Hoàn tất chu kỳ --once, dừng Brain.")
+                break
 
             # Nghỉ 60 giây giữa các chu kỳ
             time.sleep(60)
