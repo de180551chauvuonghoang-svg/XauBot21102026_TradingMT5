@@ -7,9 +7,26 @@ Write-Host "====================================================================
 $projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $brainDir = Join-Path $projectDir "brain"
 $mql5Dir = Join-Path $projectDir "mql5"
-$mt5Exe = "D:\metatradexau\terminal64.exe"
-if (-not (Test-Path $mt5Exe)) { $mt5Exe = "C:\Program Files\MetaTrader 5\terminal64.exe" }
-$metaEditorExe = "D:\metatradexau\metaeditor64.exe"
+$mt5PathEnv = $env:MT5_PATH
+if ($mt5PathEnv -and (Test-Path "$mt5PathEnv\terminal64.exe")) {
+    $mt5Exe = "$mt5PathEnv\terminal64.exe"
+    $metaEditorExe = "$mt5PathEnv\metaeditor64.exe"
+} else {
+    $candidates = @("C:\Program Files\MetaTrader 5", "D:\metatradexau")
+    $found = $false
+    foreach ($cand in $candidates) {
+        if (Test-Path "$cand\terminal64.exe") {
+            $mt5Exe = "$cand\terminal64.exe"
+            $metaEditorExe = "$cand\metaeditor64.exe"
+            $found = $true
+            break
+        }
+    }
+    if (-not $found) {
+        $mt5Exe = "C:\Program Files\MetaTrader 5\terminal64.exe"
+        $metaEditorExe = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
+    }
+}
 $expertsDir = "$env:APPDATA\MetaQuotes\Terminal\6E04D87B282C6D00B0407B7ADE5323EE\MQL5\Experts\MultiAssetEA"
 
 Write-Host "`n[1/4] Kiem tra moi truong Python..." -ForegroundColor Cyan

@@ -13,8 +13,12 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from risk.risk_officer import RiskOfficer
-from agents.bull_bear import BullAgent, BearAgent
+try:
+    from brain.risk.risk_officer import RiskOfficer
+    from brain.agents.bull_bear import BullAgent, BearAgent
+except (ImportError, ModuleNotFoundError):
+    from risk.risk_officer import RiskOfficer
+    from agents.bull_bear import BullAgent, BearAgent
 
 logger = logging.getLogger("HeadTrader")
 
@@ -96,49 +100,29 @@ class HeadTrader:
                 logger.warning(f"Risk Officer VETO lệnh {symbol} {action}: {reason}")
                 continue
 
-            # 4. Tính toán lot size dựa trên equity thật và khoảng cách SL
-            equity = 500.0
-            if current_account_state and current_account_state.get("equity", 0) > 0:
-                equity = current_account_state["equity"]
-            else:
-                try:
-                    import MetaTrader5 as mt5
-                    acct = mt5.account_info()
-                    if acct and acct.equity > 0:
-                        equity = acct.equity
-                except Exception:
-                    pass
-
-            sl_dist = abs(signal["price"] - signal["sl"])
-            risk_cash = equity * 0.005  # 0.5% rủi ro (ví dụ $500 -> $2.5)
-
-            # Tính toán tổn thất tương ứng trên 1.0 lot chuẩn
-            if "XAU" in symbol or "GOLD" in symbol:
-                loss_per_lot = sl_dist * 100.0  # 100 oz contract size
-            elif "JPY" in symbol:
-                pips = sl_dist / 0.01
-                loss_per_lot = max(10.0, pips * 6.5)
-            else:
-                pips = sl_dist / 0.0001
-                loss_per_lot = max(10.0, pips * 10.0)
-
-            raw_lot = risk_cash / loss_per_lot
-            size_factor = self.risk_officer.get_size_factor()
-            final_lot = round(raw_lot * size_factor, 2)
-            if final_lot < 0.01:
-                final_lot = 0.01
-            elif final_lot > 0.10:
-                final_lot = 0.10  # Giới hạn an toàn tuyệt đối cho tài khoản $500
-
-            signal["lots"] = final_lot
-            signal["magic"] = 1004
-            signal["approved_by"] = "HeadTrader"
-            signal["macro_alignment"] = bias
-            approved_signals.append(signal)
+            # A2 & A7 FIX: Single Execution Path & Intent-Only Signals
+            # Python Brain chỉ phát tín hiệu intent (không tự tính lot).
+            # MQL5 EA (RiskManager::CalcLot) là nơi duy nhất tính lot dựa trên tick value, stops level, contract size của broker.
+            approved_signal = {
+                "symbol": symbol,
+                "type": action,
+                "action": action,
+                "price": float(signal["price"]),
+                "stop_loss": float(signal["sl"]),
+                "sl": float(signal["sl"]),
+                "take_profit1": float(signal["tp"]),
+                "tp": float(signal["tp"]),
+                "magic": 1004,
+                "confidence": float(formatted_signal["confidence"]),
+                "strategy": signal.get("strategy", "BrainAI"),
+                "approved_by": "HeadTrader",
+                "macro_alignment": bias,
+            }
+            approved_signals.append(approved_signal)
 
             logger.info(
-                f"✅ HeadTrader ĐÃ DUYỆT: {symbol} {action} {signal['lots']} lots | "
-                f"Macro: {bias} | Strategy: {signal.get('strategy')} | Magic: 1004"
+                f"✅ HeadTrader ĐÃ DUYỆT TÍN HIỆU: {symbol} {action} @ {signal['price']} | "
+                f"SL={signal['sl']} | TP={signal['tp']} | Macro: {bias} | Strategy: {approved_signal['strategy']} | Magic: 1004"
             )
 
         return approved_signals

@@ -52,24 +52,31 @@ class RiskOfficer:
         if self._halted:
             return False, f"System halted: {self._halt_reason}"
 
+        # 0. Kiểm tra cờ Halt trực tiếp từ EA (A6 / T13 FIX)
+        if account_state and account_state.get("halted", False):
+            halt_msg = account_state.get("halt_reason", "EA Circuit Breaker Active")
+            self.halt(f"MT5 EA đang Halt: {halt_msg}")
+            return False, f"EA Halted: {halt_msg}"
+
         # 1. SL bắt buộc
-        if self.require_hard_sl and not signal.get("stop_loss"):
+        sl = signal.get("stop_loss") or signal.get("sl")
+        if self.require_hard_sl and (sl is None or float(sl) <= 0):
             return False, "NO HARD SL - Từ chối lệnh thiếu SL cứng"
 
         # 2. Kiểm tra daily loss
-        dd = account_state.get("daily_loss_pct", 0)
+        dd = account_state.get("daily_loss_pct", 0) if account_state else 0
         if dd >= self.max_daily_loss:
             self.halt(f"Daily loss {dd:.2f}% >= limit {self.max_daily_loss}%")
             return False, f"Daily circuit breaker: {dd:.2f}%"
 
         # 3. Kiểm tra weekly loss
-        wdd = account_state.get("weekly_loss_pct", 0)
+        wdd = account_state.get("weekly_loss_pct", 0) if account_state else 0
         if wdd >= self.max_weekly_loss:
             self.halt(f"Weekly loss {wdd:.2f}% >= limit {self.max_weekly_loss}%")
             return False, f"Weekly circuit breaker: {wdd:.2f}%"
 
         # 4. Kiểm tra total DD
-        total_dd = account_state.get("total_dd_pct", 0)
+        total_dd = account_state.get("total_dd_pct", 0) if account_state else 0
         if total_dd >= self.max_total_dd:
             self.halt(f"Total DD {total_dd:.2f}% >= limit {self.max_total_dd}%")
             return False, f"Total DD circuit breaker: {total_dd:.2f}%"

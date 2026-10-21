@@ -145,10 +145,10 @@ def main():
                     "balance": 10000.0,
                 }
 
-                # 3. Kiểm tra tin tức sắp ra (gửi blackout list sang EA)
+                # 3. Kiểm tra tin tức sắp ra (A4 FIX: Luôn gửi danh sách blackout kể cả rỗng để EA giải phóng blackout khi hết tin)
                 upcoming_news = calendar.get_upcoming_high_impact(minutes_ahead=60)
+                bridge.send_news_blackout(upcoming_news or [])
                 if upcoming_news:
-                    bridge.send_news_blackout(upcoming_news)
                     logger.info(f"News blackout: {[n['name'] for n in upcoming_news]}")
 
                 # 4. Nghiên cứu thị trường & LLM (chạy mỗi 15 phút để tiết kiệm quota Groq)

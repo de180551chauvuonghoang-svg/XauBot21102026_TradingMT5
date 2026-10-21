@@ -94,14 +94,16 @@ public:
       return false;
    }
 
-   // Kiểm tra giờ giao dịch theo phiên
+   // Kiểm tra giờ giao dịch theo phiên (chuẩn hóa theo giờ UTC/GMT)
    bool IsTradingSessionActive(const string symbol) {
-      MqlDateTime dt; TimeToStruct(TimeCurrent(), dt);
+      MqlDateTime dt;
+      TimeToStruct(TimeGMT(), dt); // A10 FIX: Sử dụng TimeGMT() thay vì TimeCurrent()
       int hour = dt.hour;
 
-      // Tránh rollover / đóng phiên thứ Sáu
+      // Tránh rollover / đóng phiên cuối tuần (thứ Sáu 21:00 UTC đến Chủ Nhật 22:00 UTC)
       if(dt.day_of_week == 5 && hour >= 21) return false;
-      if(dt.day_of_week == 6 || dt.day_of_week == 0) return false;
+      if(dt.day_of_week == 6) return false;
+      if(dt.day_of_week == 0 && hour < 22) return false;
 
       // Tokyo session: 00:00 - 09:00 UTC
       // London session: 07:00 - 16:00 UTC
@@ -114,7 +116,7 @@ public:
       // Chỉ số và Dầu chỉ giao dịch phiên NY
       if((isIndex || isOil) && (hour < 13 || hour >= 22)) return false;
 
-      // Vàng: London + NY
+      // Vàng: London + NY (07:00 - 22:00 UTC)
       if(isGold && (hour < 7 || hour >= 22)) return false;
 
       return true;

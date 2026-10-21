@@ -51,10 +51,18 @@ protected:
    string          m_symbol;
    ENUM_TIMEFRAMES m_tf;
    string          m_name;
+   int             m_hATR;
+   int             m_hEMA_Fast;
+   int             m_hEMA_Slow;
 
 public:
-   CStrategyBase() : m_symbol(""), m_tf(PERIOD_H1), m_name("BaseStrategy") {}
-   virtual ~CStrategyBase() {}
+   CStrategyBase() : m_symbol(""), m_tf(PERIOD_H1), m_name("BaseStrategy"),
+                     m_hATR(INVALID_HANDLE), m_hEMA_Fast(INVALID_HANDLE), m_hEMA_Slow(INVALID_HANDLE) {}
+   virtual ~CStrategyBase() {
+      if(m_hATR != INVALID_HANDLE)      IndicatorRelease(m_hATR);
+      if(m_hEMA_Fast != INVALID_HANDLE) IndicatorRelease(m_hEMA_Fast);
+      if(m_hEMA_Slow != INVALID_HANDLE) IndicatorRelease(m_hEMA_Slow);
+   }
 
    virtual void    Init(const string symbol, ENUM_TIMEFRAMES tf) {
       m_symbol = symbol;
@@ -70,23 +78,30 @@ public:
    string GetName()   const { return m_name;   }
    string GetSymbol() const { return m_symbol; }
 
-   // Helper: Tính ATR
+   // Helper: Tính ATR (cache handle tái sử dụng - A12 FIX)
    double GetATR(int period = 14, int shift = 0) {
+      if(m_hATR == INVALID_HANDLE) {
+         m_hATR = iATR(m_symbol, m_tf, period);
+         if(m_hATR == INVALID_HANDLE) return 0;
+      }
       double buf[];
-      int h = iATR(m_symbol, m_tf, period);
-      if(h == INVALID_HANDLE) return 0;
-      if(CopyBuffer(h, 0, shift, 1, buf) < 1) { IndicatorRelease(h); return 0; }
-      IndicatorRelease(h);
+      if(CopyBuffer(m_hATR, 0, shift, 1, buf) < 1) return 0;
       return buf[0];
    }
 
-   // Helper: Tính EMA
+   // Helper: Tính EMA (cache handle tái sử dụng - A12 FIX)
    double GetEMA(int period, int shift = 0) {
-      double buf[];
-      int h = iMA(m_symbol, m_tf, period, 0, MODE_EMA, PRICE_CLOSE);
+      int h = INVALID_HANDLE;
+      if(period <= 30) {
+         if(m_hEMA_Fast == INVALID_HANDLE) m_hEMA_Fast = iMA(m_symbol, m_tf, period, 0, MODE_EMA, PRICE_CLOSE);
+         h = m_hEMA_Fast;
+      } else {
+         if(m_hEMA_Slow == INVALID_HANDLE) m_hEMA_Slow = iMA(m_symbol, m_tf, period, 0, MODE_EMA, PRICE_CLOSE);
+         h = m_hEMA_Slow;
+      }
       if(h == INVALID_HANDLE) return 0;
-      if(CopyBuffer(h, 0, shift, 1, buf) < 1) { IndicatorRelease(h); return 0; }
-      IndicatorRelease(h);
+      double buf[];
+      if(CopyBuffer(h, 0, shift, 1, buf) < 1) return 0;
       return buf[0];
    }
 };

@@ -51,13 +51,46 @@ symbols:
     max_spread_points: 30
     contract_size: 1
 
-  - name: USOIL
-    suffix: ""
-    description: "WTI Crude Oil"
-    sessions: [newyork]
-    strategies: [trend]
-    max_spread_points: 40
     contract_size: 100              # barrels
+
+  - name: AUDUSD
+    suffix: ""
+    description: "AUD / USD"
+    sessions: [tokyo, london, newyork]
+    strategies: [trend, breakout]
+    max_spread_points: 20
+    contract_size: 100000
+    lot_min: 0.01
+    lot_step: 0.01
+
+  - name: NZDUSD
+    suffix: ""
+    description: "NZD / USD"
+    sessions: [tokyo, london]
+    strategies: [trend, mean_reversion]
+    max_spread_points: 25
+    contract_size: 100000
+    lot_min: 0.01
+    lot_step: 0.01
+
+  - name: USDCAD
+    suffix: ""
+    description: "USD / CAD"
+    sessions: [london, newyork]
+    strategies: [trend, breakout]
+    max_spread_points: 20
+    contract_size: 100000
+    lot_min: 0.01
+    lot_step: 0.01
+
+# Thông số Broker MetaQuotes-Demo
+broker_spec:
+  server_utc_offset_hours: 3 # Giờ broker hiện tại UTC+3
+  demo_account:
+    login: 114393008
+    balance: 500.0
+    leverage: 100
+    type: "hedged"
 
 # Phiên giao dịch (giờ UTC)
 sessions:

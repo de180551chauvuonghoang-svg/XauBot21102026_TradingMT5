@@ -38,6 +38,17 @@ enum ENUM_LOT_MODE {
 #define MAGIC_SESSION_BREAKOUT  1002
 #define MAGIC_MEAN_REVERSION    1003
 #define MAGIC_BRAIN_AI          1004
+#define MAGIC_DEFAULT           202610
+
+// Hàm dùng chung kiểm tra xem ticket/position có thuộc về EA này không
+inline bool IsOurMagic(ulong m) {
+   if(m == MAGIC_DEFAULT || m == MAGIC_TREND_FOLLOWER || 
+      m == MAGIC_SESSION_BREAKOUT || m == MAGIC_MEAN_REVERSION || 
+      m == MAGIC_BRAIN_AI) return true;
+   if(m >= 1000 && m <= 1099) return true;
+   if(m >= 202600 && m <= 202699) return true;
+   return false;
+}
 
 //--- Trade signal packet from Brain or strategy
 struct SignalPacket {

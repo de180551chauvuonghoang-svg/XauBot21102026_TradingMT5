@@ -62,6 +62,7 @@ class EconomicCalendar:
                 upcoming.append({
                     "name": event["name"],
                     "time": evt_time.isoformat(),
+                    "time_utc": int(evt_time.timestamp()),
                     "impact": event.get("impact", "HIGH"),
                     "blackout_before_min": self._blackout_before,
                     "blackout_after_min":  self._blackout_after,

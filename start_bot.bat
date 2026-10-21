@@ -13,11 +13,19 @@ set PROJECT_DIR=%~dp0
 set BRAIN_DIR=%PROJECT_DIR%brain
 set MQL5_DIR=%PROJECT_DIR%mql5
 
-set MT5_EXE=D:\metatradexau\terminal64.exe
-if not exist "%MT5_EXE%" set MT5_EXE=C:\Program Files\MetaTrader 5\terminal64.exe
-
-set METAEDITOR_EXE=D:\metatradexau\metaeditor64.exe
-if not exist "%METAEDITOR_EXE%" set METAEDITOR_EXE=C:\Program Files\MetaTrader 5\metaeditor64.exe
+if defined MT5_PATH (
+    set MT5_EXE=%MT5_PATH%\terminal64.exe
+    set METAEDITOR_EXE=%MT5_PATH%\metaeditor64.exe
+) else (
+    set MT5_EXE=C:\Program Files\MetaTrader 5\terminal64.exe
+    set METAEDITOR_EXE=C:\Program Files\MetaTrader 5\metaeditor64.exe
+    if not exist "!MT5_EXE!" (
+        if exist "D:\metatradexau\terminal64.exe" (
+            set MT5_EXE=D:\metatradexau\terminal64.exe
+            set METAEDITOR_EXE=D:\metatradexau\metaeditor64.exe
+        )
+    )
+)
 
 set MT5_EXPERTS_DIR=%APPDATA%\MetaQuotes\Terminal\6E04D87B282C6D00B0407B7ADE5323EE\MQL5\Experts\MultiAssetEA
 

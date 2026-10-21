@@ -39,5 +39,5 @@ strategies:
     bollinger_period: 20
     bollinger_dev: 2.0
     adx_max: 20.0        # Bắt buộc ADX < 20 để tránh bắt đỉnh đáy trong trend
-    atr_sl_multiplier: 1.5
-    min_rr_ratio: 1.33   # R:R tối thiểu để có kỳ vọng dương
+    atr_sl_multiplier: 1.0
+    min_rr_ratio: 1.2    # Đồng bộ với InpRR_MeanRev (1.2) trong EA (A13 FIX)

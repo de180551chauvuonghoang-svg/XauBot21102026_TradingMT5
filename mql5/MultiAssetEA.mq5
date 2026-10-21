@@ -132,7 +132,7 @@ int OnInit() {
 
       g_meanrevs[i]  = new CMeanReversionStrategy();
       g_meanrevs[i].Init(sym, InpTF);
-      g_meanrevs[i].Configure(InpRsiPeriod, InpRsiOS, InpRsiOB, 20, 2.0, 20.0);
+      g_meanrevs[i].Configure(InpRsiPeriod, InpRsiOS, InpRsiOB, 20, 2.0, 20.0, InpRR_MeanRev, 1.0); // A13 FIX
    }
 
    // --- State
@@ -169,44 +169,41 @@ void OnDeinit(const int reason) {
 //| OnTick - Hàm chính, gọi mỗi tick                                |
 //+------------------------------------------------------------------+
 void OnTick() {
-   // 1. Kiểm tra Kill Switch và Heartbeat từ Python Brain qua Bridge
+   // 1. A6 FIX: Cập nhật Account State định kỳ sang FILE_COMMON trước CheckAllLimits
+   g_bridge.WriteAccountState(g_risk);
+
+   // 2. Kiểm tra Kill Switch từ xa
    if(g_bridge.CheckKillSwitch(g_risk, g_exec)) {
       return; // Hệ thống đã dừng khẩn cấp
    }
 
+   // 3. A5 FIX: Kiểm tra Heartbeat từ Python Brain qua TimeGMT
+   bool brainAlive = true;
    if(InpHeartbeatEnabled) {
-      g_bridge.CheckHeartbeat(InpHeartbeatTimeout);
+      brainAlive = g_bridge.CheckHeartbeat(InpHeartbeatTimeout);
    }
 
-   // 2. Kiểm tra Risk Officer (Daily/Weekly/Total DD)
+   // 4. Kiểm tra Risk Officer (Daily/Weekly/Total DD)
    if(!g_risk.CheckAllLimits()) {
       if(!g_risk.IsHalted()) return;
       static datetime lastHaltMsg = 0;
       if(TimeCurrent() - lastHaltMsg > 300) {
-         g_telegram.NotifyHalt("Circuit Breaker kích hoạt - giới hạn DD chạm ngưỡng");
+         g_telegram.NotifyHalt(StringFormat("Circuit Breaker kích hoạt: %s", g_risk.GetHaltReason()));
          lastHaltMsg = TimeCurrent();
       }
       return;
    }
 
-   // 3. Cập nhật Account State sang FILE_COMMON cho Python Brain & Risk Officer đọc
-   double startEq = g_risk.GetDailyStartingEquity();
-   double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   double dailyDD = (startEq > 0) ? (startEq - equity) / startEq * 100.0 : 0.0;
-   double totalDD = (balance > 0) ? (balance - equity) / balance * 100.0 : 0.0;
-   g_bridge.WriteAccountState(dailyDD, 0.0, totalDD);
-
-   // 4. Báo cáo hàng ngày (một lần vào đầu giờ)
+   // 5. Báo cáo hàng ngày (một lần vào đầu giờ)
    SendDailyReportIfNeeded();
 
-   // 5. Heartbeat notify mỗi 4 giờ
+   // 6. Heartbeat notify mỗi 4 giờ
    if(TimeCurrent() - g_lastHeartbeatNotify > 14400) {
       g_telegram.NotifyHeartbeat("OK");
       g_lastHeartbeatNotify = TimeCurrent();
    }
 
-   // 6. Quản lý trailing và partial close cho các vị thế hiện có
+   // 7. Quản lý trailing và partial close cho các vị thế hiện có
    int n = g_portfolio.GetSymCount();
    for(int i = 0; i < n; i++) {
       string sym = g_portfolio.GetSymbol(i);
@@ -214,10 +211,12 @@ void OnTick() {
       g_exec.ApplyAtrTrailing(sym, InpTF, InpTrailAtrMult);
    }
 
-   // 7. Xử lý tín hiệu đến từ Python Brain nếu có
-   g_bridge.ProcessBrainSignals(g_risk, g_exec, InpSymbols);
+   // 8. A3 FIX: Xử lý tín hiệu đến từ Python Brain nếu Brain đang alive
+   if(brainAlive) {
+      g_bridge.ProcessBrainSignals(g_risk, g_exec, g_safety, g_portfolio, InpSymbols);
+   }
 
-   // 8. Quét tín hiệu và mở lệnh nội tại (MQL5 Strategies)
+   // 9. Quét tín hiệu và mở lệnh nội tại (MQL5 Strategies)
    for(int i = 0; i < n; i++) {
       string sym = g_portfolio.GetSymbol(i);
 
