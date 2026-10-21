@@ -1,0 +1,59 @@
+# ============================================================
+#  .gitignore — MultiAssetEA v2
+#  Bảo vệ credentials và file nhạy cảm khỏi GitHub
+# ============================================================
+
+# ===== SECRETS - KHÔNG BAO GIỜ COMMIT =====
+.env
+*.env
+.env.*
+!.env.example        # CHỈ cho phép .env.example lên git
+
+# ===== MT5 / MQL5 =====
+*.ex5                # Compiled EA binary
+*.ex4
+*.log
+MQL5/Logs/
+MQL5/tester/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.Python
+
+# ===== Journal / Data nhạy cảm =====
+brain/journal/
+brain/bridge_files/
+journal/
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Logs =====
+*.log
+logs/
+brain/*.log
+
+# ===== Backup files =====
+*.bak
+*.tmp
+*~

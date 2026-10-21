@@ -1,0 +1,48 @@
+# config/risk.yaml
+# Risk Officer Configuration - MultiAssetEA v2
+# ⚠️ Đây là giới hạn cứng - không được phép thay đổi mà không có đánh giá kỹ lưỡng
+
+risk_per_trade_pct: 0.5          # % equity rủi ro mỗi lệnh (0.25–0.5 khuyến nghị)
+max_open_risk_pct: 2.0           # Tổng % rủi ro vị thế đang mở
+max_daily_loss_pct: 2.0          # Lỗ ngày → dừng ngay (circuit breaker)
+max_weekly_loss_pct: 4.0         # Lỗ tuần → dừng đến tuần sau
+max_total_drawdown_pct: 10.0     # DD tổng tối đa → dừng toàn bộ
+kelly_fraction_cap: 0.25         # Tối đa ¼ Kelly để tránh overbetting
+
+# Tự dừng nếu DD live vượt 1.5x DD backtest (edge đã biến mất)
+halt_if_live_dd_exceeds_backtest_dd_x: 1.5
+backtest_max_dd_pct: 8.0         # DD tham chiếu từ backtest
+
+# Giảm size sau N lệnh thua liên tiếp
+reduce_size_after_consecutive_losses: 3
+min_size_reduction_factor: 0.3   # Tối thiểu 30% size gốc
+
+# Tin tức lớn cần chặn: NFP, CPI, FOMC Interest Rate, GDP
+news_blackout_minutes:
+  before: 30
+  after: 30
+
+# Spread / slippage
+max_spread_atr_ratio: 0.15       # Spread/ATR < 15%
+max_slippage_points: 20
+
+# Bắt buộc
+require_hard_sl: true            # MỌI lệnh phải có SL cứng trên server
+allow_martingale: false          # NGHIÊM CẤM
+allow_grid: false                # NGHIÊM CẤM
+allow_no_sl: false               # NGHIÊM CẤM
+
+# Tương quan nhóm
+correlation_groups:
+  usd_long:   [EURUSD, GBPUSD, XAUUSD]  # Cùng chiều = tăng exposure USD
+  us_equities: [US30, NAS100]            # Cùng nhóm index Mỹ
+
+# Heartbeat (Python Brain → MT5 EA)
+heartbeat_timeout_sec: 30
+
+# Prop firm rules (điền nếu dùng prop firm)
+prop_firm:
+  enabled: false
+  daily_drawdown_limit_pct: 5.0
+  max_drawdown_limit_pct: 10.0
+  news_trading_allowed: false

@@ -1,0 +1,77 @@
+# config/symbols.yaml
+# Danh mục tài sản MultiAssetEA v2
+# ⚠️ Kiểm tra suffix với broker của bạn (.m, .pro, .ecn, v.v.)
+
+symbols:
+  - name: XAUUSD
+    suffix: ""
+    description: "Vàng / USD"
+    sessions: [london, newyork]
+    strategies: [trend, breakout]   # Mean reversion ít phù hợp với Gold (biến động lớn)
+    max_spread_points: 40
+    contract_size: 100              # 1 lot = 100 oz vàng
+
+  - name: EURUSD
+    suffix: ""
+    description: "Euro / USD"
+    sessions: [london, newyork]
+    strategies: [trend, breakout, mean_reversion]
+    max_spread_points: 15
+    contract_size: 100000
+
+  - name: GBPUSD
+    suffix: ""
+    description: "Bảng Anh / USD"
+    sessions: [london, newyork]
+    strategies: [trend, breakout, mean_reversion]
+    max_spread_points: 20
+    contract_size: 100000
+
+  - name: USDJPY
+    suffix: ""
+    description: "USD / Yên Nhật"
+    sessions: [tokyo, london, newyork]
+    strategies: [trend, mean_reversion]
+    max_spread_points: 15
+    contract_size: 100000
+
+  - name: US30
+    suffix: ""
+    description: "Dow Jones Industrial Average"
+    sessions: [newyork]
+    strategies: [trend, breakout]
+    max_spread_points: 30
+    contract_size: 1                # Mini CFD
+
+  - name: NAS100
+    suffix: ""
+    description: "Nasdaq 100"
+    sessions: [newyork]
+    strategies: [trend, breakout]
+    max_spread_points: 30
+    contract_size: 1
+
+  - name: USOIL
+    suffix: ""
+    description: "WTI Crude Oil"
+    sessions: [newyork]
+    strategies: [trend]
+    max_spread_points: 40
+    contract_size: 100              # barrels
+
+# Phiên giao dịch (giờ UTC)
+sessions:
+  tokyo:
+    start: "00:00"
+    end:   "09:00"
+  london:
+    start: "07:00"
+    end:   "16:00"
+  newyork:
+    start: "13:00"
+    end:   "22:00"
+
+# Tránh rollover
+rollover_avoid:
+  start: "23:30"
+  end:   "00:30"
