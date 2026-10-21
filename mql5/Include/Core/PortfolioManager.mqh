@@ -78,7 +78,7 @@ public:
    int TotalOpenPositions() {
       int cnt = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
-         if(m_posInfo.SelectByIndex(i) && m_posInfo.Magic() == m_magic) cnt++;
+         if(m_posInfo.SelectByIndex(i) && IsOurMagic(m_posInfo.Magic())) cnt++;
       }
       return cnt;
    }
@@ -86,7 +86,7 @@ public:
    int SymbolOpenPositions(const string sym) {
       int cnt = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
-         if(m_posInfo.SelectByIndex(i) && m_posInfo.Magic() == m_magic && m_posInfo.Symbol() == sym) cnt++;
+         if(m_posInfo.SelectByIndex(i) && IsOurMagic(m_posInfo.Magic()) && m_posInfo.Symbol() == sym) cnt++;
       }
       return cnt;
    }
@@ -104,7 +104,7 @@ public:
          int sameDirCount = 0;
          ENUM_POSITION_TYPE posType = (signalType == SIGNAL_BUY) ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
          for(int i = PositionsTotal() - 1; i >= 0; i--) {
-            if(!m_posInfo.SelectByIndex(i) || m_posInfo.Magic() != m_magic) continue;
+            if(!m_posInfo.SelectByIndex(i) || !IsOurMagic(m_posInfo.Magic())) continue;
             for(int s = 0; s < m_groups[g].count; s++) {
                if(m_posInfo.Symbol() == m_groups[g].syms[s] && m_posInfo.PositionType() == posType) {
                   sameDirCount++;

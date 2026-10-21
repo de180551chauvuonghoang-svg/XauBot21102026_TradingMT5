@@ -25,6 +25,7 @@ private:
    // --- State
    double   m_dailyStartEquity;
    double   m_weeklyStartEquity;
+   double   m_peakEquity;         // Đỉnh equity cao nhất từng đạt
    datetime m_lastDayReset;
    datetime m_lastWeekReset;
    bool     m_dailyHalted;        // Dừng trong ngày hiện tại
@@ -52,6 +53,7 @@ public:
       m_backtestMaxDD       = 10.0;
       m_dailyStartEquity    = 0;
       m_weeklyStartEquity   = 0;
+      m_peakEquity          = 0;
       m_lastDayReset        = 0;
       m_lastWeekReset       = 0;
    }
@@ -78,6 +80,9 @@ public:
    bool CheckAllLimits() {
       double equity   = AccountInfoDouble(ACCOUNT_EQUITY);
       double balance  = AccountInfoDouble(ACCOUNT_BALANCE);
+
+      // 0. Cập nhật đỉnh Equity (Peak Equity)
+      if(equity > m_peakEquity) m_peakEquity = equity;
 
       // 1. Tự động Reset ngày mới (Reset Daily Circuit Breaker)
       MqlDateTime dt; TimeToStruct(TimeCurrent(), dt);
@@ -130,12 +135,13 @@ public:
          }
       }
 
-      // 5. Kiểm tra total Drawdown
-      if(balance > 0) {
-         double totalDD = (balance - equity) / balance * 100.0;
+      // 5. Kiểm tra total Drawdown (tính theo Đỉnh Equity thay vì so với Balance - A6 FIX)
+      if(m_peakEquity > 0) {
+         double totalDD = (m_peakEquity - equity) / m_peakEquity * 100.0;
          if(totalDD >= m_maxTotalDDPct) {
             if(!m_permanentHalted) {
-               PrintFormat("[RISK HALT] Total floating DD %.2f%% >= limit %.2f%%! Dừng vĩnh viễn để bảo toàn vốn.", totalDD, m_maxTotalDDPct);
+               PrintFormat("[RISK HALT] Total equity DD %.2f%% (Peak: %.2f, Current: %.2f) >= limit %.2f%%! Dừng vĩnh viễn để bảo toàn vốn.",
+                           totalDD, m_peakEquity, equity, m_maxTotalDDPct);
                m_permanentHalted = true;
             }
             return false;
@@ -151,6 +157,55 @@ public:
          }
       }
 
+      return true;
+   }
+
+   // A8 FIX: Tính tổng rủi ro của các vị thế đang mở
+   double GetTotalOpenRisk() {
+      double totalRisk = 0.0;
+      for(int i = PositionsTotal() - 1; i >= 0; i--) {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket == 0) continue;
+         if(!IsOurMagic(PositionGetInteger(POSITION_MAGIC))) continue;
+
+         double sl = PositionGetDouble(POSITION_SL);
+         if(sl <= 0) continue;
+
+         string sym    = PositionGetString(POSITION_SYMBOL);
+         double open   = PositionGetDouble(POSITION_PRICE_OPEN);
+         double vol    = PositionGetDouble(POSITION_VOLUME);
+         double point  = SymbolInfoDouble(sym, SYMBOL_POINT);
+         double tickSz = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE);
+         double tickVal= SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE);
+         if(point <= 0 || tickSz <= 0 || tickVal <= 0) continue;
+
+         double slDist = MathAbs(open - sl);
+         double loss = (slDist / point) * (tickVal * (point / tickSz)) * vol;
+         totalRisk += loss;
+      }
+      return totalRisk;
+   }
+
+   // A8 FIX: Kiểm tra xem lệnh mới có làm tổng rủi ro mở vượt quá 2% equity không
+   bool CheckOpenRisk(const string symbol, double lot, double entryPrice, double slPrice) {
+      if(lot <= 0 || slPrice <= 0) return false;
+      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      if(equity <= 0) return false;
+
+      double point   = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double tickSz  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tickVal = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+      if(point <= 0 || tickSz <= 0 || tickVal <= 0) return false;
+
+      double newTradeLoss = (MathAbs(entryPrice - slPrice) / point) * (tickVal * (point / tickSz)) * lot;
+      double currentOpenRisk = GetTotalOpenRisk();
+      double totalRiskPct = (currentOpenRisk + newTradeLoss) / equity * 100.0;
+
+      if(totalRiskPct > m_maxOpenRiskPct) {
+         PrintFormat("[RiskManager] Tổng rủi ro mở %.2f%% ($%.2f hiện tại + $%.2f lệnh mới) vượt giới hạn %.2f%% vốn $%.2f. TỪ CHỐI LỆNH!",
+                     totalRiskPct, currentOpenRisk, newTradeLoss, m_maxOpenRiskPct, equity);
+         return false;
+      }
       return true;
    }
 
@@ -249,6 +304,17 @@ public:
    }
    bool IsHalted() const          { return m_permanentHalted || m_dailyHalted || m_weeklyHalted; }
    bool IsDailyHalted() const     { return m_dailyHalted; }
+   bool IsWeeklyHalted() const    { return m_weeklyHalted; }
+   bool IsPermanentHalted() const { return m_permanentHalted; }
    int  GetConsecutiveLosses() const { return m_consecutiveLosses; }
    double GetDailyStartingEquity() const { return m_dailyStartEquity; }
+   double GetWeeklyStartingEquity() const { return m_weeklyStartEquity; }
+   double GetPeakEquity() const { return m_peakEquity; }
+
+   string GetHaltReason() const {
+      if(m_permanentHalted) return "TOTAL_DRAWDOWN_CIRCUIT_BREAKER";
+      if(m_weeklyHalted)    return "WEEKLY_LOSS_LIMIT";
+      if(m_dailyHalted)     return "DAILY_LOSS_LIMIT";
+      return "NONE";
+   }
 };

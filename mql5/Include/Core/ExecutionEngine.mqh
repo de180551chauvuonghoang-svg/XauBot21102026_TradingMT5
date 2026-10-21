@@ -91,9 +91,8 @@ public:
          if(!m_posInfo.SelectByIndex(i)) continue;
          if(m_posInfo.Symbol() != symbol) continue;
 
-         // Chấp nhận magic mặc định hoặc magic của các chiến lược
-         ulong posMagic = m_posInfo.Magic();
-         if(posMagic != m_magic && (posMagic < 1001 || posMagic > 1004)) continue;
+         // Chấp nhận magic thuộc về EA này
+         if(!IsOurMagic(m_posInfo.Magic())) continue;
 
          double openPrice    = m_posInfo.PriceOpen();
          double currentPrice = m_posInfo.PriceCurrent();
@@ -117,16 +116,35 @@ public:
          // Chỉ đóng 50% một lần duy nhất
          if(atTP1) {
             double minLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-            double halfLot = NormalizeDouble(volume * 0.5, 2);
-            if(halfLot < minLot) halfLot = volume;
+            double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+            if(minLot <= 0) minLot = 0.01;
+            if(stepLot <= 0) stepLot = 0.01;
 
-            if(m_trade.PositionClosePartial(ticket, halfLot)) {
+            // A9 FIX: Nếu volume < 2 * lot tối thiểu (ví dụ 0.01 lot trên tài khoản $500),
+            // không đóng 100% ở 0.85R mà chỉ dời SL về BE để bảo toàn tỷ lệ R:R thiết kế.
+            if(volume < 2.0 * minLot) {
                MarkTicketPartiallyClosed(ticket);
-               // Dời SL về hòa vốn + 2 pts
                double newSl = NormalizeDouble(openPrice + 2 * SymbolInfoDouble(symbol, SYMBOL_POINT)
                               * (pType == POSITION_TYPE_BUY ? 1 : -1), digits);
-               m_trade.PositionModify(ticket, newSl, tp);
-               PrintFormat("[EXEC] Partial close 50%% %s #%I64u. SL dời về %.5f (hòa vốn+2pt)", symbol, ticket, newSl);
+               if((pType == POSITION_TYPE_BUY && newSl > sl) || (pType == POSITION_TYPE_SELL && (sl == 0 || newSl < sl))) {
+                  m_trade.PositionModify(ticket, newSl, tp);
+                  PrintFormat("[EXEC] %s #%I64u: volume %.2f < 2*minLot (%.2f). Không partial, dời SL về BE %.5f để chạy tiếp tới TP.",
+                              symbol, ticket, volume, minLot, newSl);
+               }
+               continue;
+            }
+
+            double halfLot = MathFloor((volume * 0.5) / stepLot) * stepLot;
+            halfLot = NormalizeDouble(halfLot, 2);
+
+            if(halfLot >= minLot && (volume - halfLot) >= minLot) {
+               if(m_trade.PositionClosePartial(ticket, halfLot)) {
+                  MarkTicketPartiallyClosed(ticket);
+                  double newSl = NormalizeDouble(openPrice + 2 * SymbolInfoDouble(symbol, SYMBOL_POINT)
+                                 * (pType == POSITION_TYPE_BUY ? 1 : -1), digits);
+                  m_trade.PositionModify(ticket, newSl, tp);
+                  PrintFormat("[EXEC] Partial close 50%% %s #%I64u (%.2f lot). SL dời về %.5f (hòa vốn+2pt)", symbol, ticket, halfLot, newSl);
+               }
             }
          }
       }
@@ -146,7 +164,7 @@ public:
 
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
          if(!m_posInfo.SelectByIndex(i)) continue;
-         if(m_posInfo.Symbol() != symbol || m_posInfo.Magic() != m_magic) continue;
+         if(m_posInfo.Symbol() != symbol || !IsOurMagic(m_posInfo.Magic())) continue;
 
          double current = m_posInfo.PriceCurrent();
          double curSl   = m_posInfo.StopLoss();
@@ -166,11 +184,11 @@ public:
       }
    }
 
-   // Đóng tất cả lệnh của một symbol (dùng khi halt)
+   // Đóng tất cả lệnh của một symbol (dùng khi halt / kill switch)
    void CloseAll(const string symbol = "") {
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
          if(!m_posInfo.SelectByIndex(i)) continue;
-         if(m_posInfo.Magic() != m_magic) continue;
+         if(!IsOurMagic(m_posInfo.Magic())) continue;
          if(symbol != "" && m_posInfo.Symbol() != symbol) continue;
          m_trade.PositionClose(m_posInfo.Ticket());
       }
@@ -180,7 +198,7 @@ public:
       int cnt = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
          if(!m_posInfo.SelectByIndex(i)) continue;
-         if(m_posInfo.Magic() != m_magic) continue;
+         if(!IsOurMagic(m_posInfo.Magic())) continue;
          if(symbol != "" && m_posInfo.Symbol() != symbol) continue;
          cnt++;
       }

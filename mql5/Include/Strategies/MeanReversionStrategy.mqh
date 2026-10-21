@@ -33,13 +33,16 @@ public:
    }
 
    void Configure(int rsiPeriod = 14, double rsiOS = 30.0, double rsiOB = 70.0,
-                  int bbPeriod = 20, double bbDev = 2.0, double adxMax = 20.0) {
-      m_rsiPeriod   = rsiPeriod;
-      m_rsiOversold = rsiOS;
+                  int bbPeriod = 20, double bbDev = 2.0, double adxMax = 20.0,
+                  double rrRatio = 1.2, double atrSlMult = 1.0) {
+      m_rsiPeriod     = rsiPeriod;
+      m_rsiOversold   = rsiOS;
       m_rsiOverbought = rsiOB;
-      m_bbPeriod    = bbPeriod;
-      m_bbDeviation = bbDev;
-      m_adxMax      = adxMax;
+      m_bbPeriod      = bbPeriod;
+      m_bbDeviation   = bbDev;
+      m_adxMax        = adxMax;
+      m_rrRatio       = rrRatio;
+      m_atrSlMult     = atrSlMult;
    }
 
    ENUM_MARKET_REGIME GetSuitableRegime() override { return REGIME_RANGE; }
