@@ -24,16 +24,16 @@
 //=== INPUT PARAMETERS =================================================
 
 input group "=== DANH MỤC TÀI SẢN ==="
-input string InpSymbols      = "XAUUSD,EURUSD,GBPUSD,USDJPY,US30,NAS100,USOIL";
+input string InpSymbols      = "XAUUSD,EURUSD,USDCAD"; // Tập trung danh mục chủ lực (tối ưu lợi nhuận/DD)
 input ENUM_TIMEFRAMES InpTF  = PERIOD_H1;   // Khung thời gian chính
 
 input group "=== QUẢN TRỊ RỦI RO (Risk Officer) ==="
-input double InpRiskPct      = 0.5;    // % Equity rủi ro mỗi lệnh (0.25-0.5)
-input double InpMaxDailyLoss = 2.0;    // % Lỗ ngày tối đa (Circuit Breaker)
+input double InpRiskPct      = 1.0;    // % Equity rủi ro mỗi lệnh (1.0% tối ưu cho vốn $500 đánh Vàng)
+input double InpMaxDailyLoss = 2.0;    // % Lỗ ngày tối đa (Circuit Breaker 2.0%)
 input double InpMaxWeeklyLoss= 4.0;    // % Lỗ tuần tối đa
-input double InpMaxTotalDD   = 10.0;   // % Max Drawdown tổng
-input double InpBacktestDD   = 8.0;    // % DD từ backtest (dừng nếu live > 1.5x)
-input int    InpMaxTrades    = 5;      // Tổng lệnh tối đa mở đồng thời
+input double InpMaxTotalDD   = 8.0;    // % Max Drawdown tổng (giới hạn cứng bảo vệ vốn < 10%)
+input double InpBacktestDD   = 5.0;    // % DD từ backtest (dừng nếu live > 1.5x)
+input int    InpMaxTrades    = 2;      // Tối đa 2 lệnh mở đồng thời (kiểm soát rủi ro tương quan)
 input int    InpMaxPerSymbol = 1;      // Lệnh tối đa mỗi cặp tiền
 input int    InpNewsBlackout = 30;     // Phút chặn trước/sau tin lớn
 
@@ -50,13 +50,13 @@ input double InpRR_Trend     = 2.0;    // R:R Trend Following
 
 // Breakout
 input double InpMinRangePips = 15.0;   // Range phiên Á tối thiểu (pips)
-input double InpRR_Break     = 1.5;    // R:R Breakout
+input double InpRR_Break     = 2.2;    // R:R Breakout tối ưu (chốt lời nổ biên độ)
 
 // Mean Reversion
 input int    InpRsiPeriod    = 14;     // RSI Period
-input double InpRsiOS        = 30.0;   // RSI Oversold
-input double InpRsiOB        = 70.0;   // RSI Overbought
-input double InpRR_MeanRev   = 1.2;    // R:R Mean Reversion
+input double InpRsiOS        = 25.0;   // RSI Oversold (chọn lọc vùng quá bán cực đại)
+input double InpRsiOB        = 75.0;   // RSI Overbought (chọn lọc vùng quá mua cực đại)
+input double InpRR_MeanRev   = 1.5;    // R:R Mean Reversion
 
 input group "=== THỰC THI LỆNH ==="
 input ulong  InpMagic        = 202610; // Magic Number

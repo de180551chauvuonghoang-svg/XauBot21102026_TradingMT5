@@ -21,12 +21,12 @@ strategies:
     magic: 1002
     timeframe: M15
     asian_session_utc: [0, 7]
-    london_open_utc: [7, 9]
-    ny_open_utc: [13, 15]
-    min_range_pips: 15.0
+    london_open_utc: [7, 10]
+    ny_open_utc: [13, 16]
+    min_range_pips: 8.0
     max_range_pips: 80.0
     atr_expansion_min: 1.2
-    min_rr_ratio: 1.5
+    min_rr_ratio: 2.2    # Tối ưu R:R chốt lời biên độ lớn
 
   # 3. Mean Reversion Strategy (RSI + Bollinger Bands trong Sideway Range)
   mean_reversion:
@@ -34,10 +34,10 @@ strategies:
     magic: 1003
     timeframe: H1
     rsi_period: 14
-    rsi_oversold: 30.0
-    rsi_overbought: 70.0
+    rsi_oversold: 25.0   # Chọn lọc vùng quá bán cực đại
+    rsi_overbought: 75.0  # Chọn lọc vùng quá mua cực đại
     bollinger_period: 20
     bollinger_dev: 2.0
     adx_max: 20.0        # Bắt buộc ADX < 20 để tránh bắt đỉnh đáy trong trend
     atr_sl_multiplier: 1.0
-    min_rr_ratio: 1.2    # Đồng bộ với InpRR_MeanRev (1.2) trong EA (A13 FIX)
+    min_rr_ratio: 1.5    # R:R tối ưu nâng cao kỳ vọng dương

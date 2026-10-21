@@ -1,0 +1,25 @@
+{
+  "version": "MultiAssetEA v2.2 - Upgraded High Expectancy Engine",
+  "initial_balance": 500.0,
+  "final_balance": 565.11,
+  "net_profit": 65.11,
+  "roi_pct": 13.02,
+  "total_trades": 87,
+  "win_trades": 61,
+  "loss_trades": 26,
+  "win_rate_pct": 70.11,
+  "profit_factor": 2.27,
+  "max_drawdown_pct": 2.24,
+  "max_drawdown_usd": 11.22,
+  "calmar_ratio": 5.8,
+  "by_symbol": {
+    "XAUUSD": {
+      "trades": 16,
+      "profit_usd": 73.82
+    },
+    "EURUSD": {
+      "trades": 71,
+      "profit_usd": -8.71
+    }
+  }
+}

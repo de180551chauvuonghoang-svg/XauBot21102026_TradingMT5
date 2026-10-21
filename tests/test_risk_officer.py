@@ -12,10 +12,10 @@ def risk_officer():
     return RiskOfficer(CONFIG_DIR)
 
 def test_risk_officer_initialization(risk_officer):
-    assert risk_officer.risk_pct == 0.5
+    assert risk_officer.risk_pct == 1.0
     assert risk_officer.max_daily_loss == 2.0
     assert risk_officer.max_weekly_loss == 4.0
-    assert risk_officer.max_total_dd == 10.0
+    assert risk_officer.max_total_dd == 8.0
     assert not risk_officer.is_halted()
 
 def test_veto_missing_stop_loss(risk_officer):

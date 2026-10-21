@@ -138,26 +138,30 @@ public:
       ENUM_SIGNAL_TYPE signalType = SIGNAL_NONE;
       double entry = 0, sl = 0, tp1 = 0, tp2 = 0, confidence = 0;
 
+      double rangeDist = m_asianHigh - m_asianLow;
+      double slDist = MathMax(rangeDist * 0.40, 1.2 * atr);
+      if(StringFind(m_symbol, "XAU") >= 0 || StringFind(m_symbol, "GOLD") >= 0) {
+         slDist = MathMin(5.5, MathMax(3.0, slDist));
+      }
+
       // Phá vỡ lên (chưa phá lần này)
       if(!m_brokeUp && ask > m_asianHigh + 2 * point) {
          signalType = SIGNAL_BUY;
          entry  = ask;
-         sl     = NormalizeDouble(m_asianLow - atr * m_atrSlMult, digits);
-         double slDist = entry - sl;
-         tp1    = NormalizeDouble(entry + slDist * m_rrRatio * 0.7, digits);
+         sl     = NormalizeDouble(entry - slDist, digits);
+         tp1    = NormalizeDouble(entry + slDist * 1.0, digits); // Breakeven lock trigger
          tp2    = NormalizeDouble(entry + slDist * m_rrRatio, digits);
-         confidence = atrExpanded ? 0.70 : 0.55;
+         confidence = atrExpanded ? 0.75 : 0.65;
          m_brokeUp = true;
       }
       // Phá vỡ xuống
       else if(!m_brokeDn && bid < m_asianLow - 2 * point) {
          signalType = SIGNAL_SELL;
          entry  = bid;
-         sl     = NormalizeDouble(m_asianHigh + atr * m_atrSlMult, digits);
-         double slDist = sl - entry;
-         tp1    = NormalizeDouble(entry - slDist * m_rrRatio * 0.7, digits);
+         sl     = NormalizeDouble(entry + slDist, digits);
+         tp1    = NormalizeDouble(entry - slDist * 1.0, digits); // Breakeven lock trigger
          tp2    = NormalizeDouble(entry - slDist * m_rrRatio, digits);
-         confidence = atrExpanded ? 0.70 : 0.55;
+         confidence = atrExpanded ? 0.75 : 0.65;
          m_brokeDn = true;
       }
 

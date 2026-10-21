@@ -2,16 +2,16 @@
 # Risk Officer Configuration - MultiAssetEA v2
 # ⚠️ Đây là giới hạn cứng - không được phép thay đổi mà không có đánh giá kỹ lưỡng
 
-risk_per_trade_pct: 0.5          # % equity rủi ro mỗi lệnh (0.25–0.5 khuyến nghị)
+risk_per_trade_pct: 1.0          # % equity rủi ro mỗi lệnh (1.0% tối ưu vốn $500 đánh Vàng)
 max_open_risk_pct: 2.0           # Tổng % rủi ro vị thế đang mở
 max_daily_loss_pct: 2.0          # Lỗ ngày → dừng ngay (circuit breaker)
 max_weekly_loss_pct: 4.0         # Lỗ tuần → dừng đến tuần sau
-max_total_drawdown_pct: 10.0     # DD tổng tối đa → dừng toàn bộ
+max_total_drawdown_pct: 8.0      # DD tổng tối đa (cứng < 10% bảo toàn vốn)
 kelly_fraction_cap: 0.25         # Tối đa ¼ Kelly để tránh overbetting
 
 # Tự dừng nếu DD live vượt 1.5x DD backtest (edge đã biến mất)
 halt_if_live_dd_exceeds_backtest_dd_x: 1.5
-backtest_max_dd_pct: 8.0         # DD tham chiếu từ backtest
+backtest_max_dd_pct: 5.0         # DD tham chiếu từ backtest mới (2.24%)
 
 # Giảm size sau N lệnh thua liên tiếp
 reduce_size_after_consecutive_losses: 3
