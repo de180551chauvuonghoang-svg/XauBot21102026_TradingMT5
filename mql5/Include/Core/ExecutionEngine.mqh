@@ -16,9 +16,25 @@ private:
    CPositionInfo  m_posInfo;
    ulong          m_magic;
    int            m_maxDeviation;
+   ulong          m_partialTickets[];
 
    double GetAsk(const string sym) { return SymbolInfoDouble(sym, SYMBOL_ASK); }
    double GetBid(const string sym) { return SymbolInfoDouble(sym, SYMBOL_BID); }
+
+   bool IsAlreadyPartiallyClosed(ulong ticket, ENUM_POSITION_TYPE pType, double openPrice, double sl) {
+      for(int i = 0; i < ArraySize(m_partialTickets); i++) {
+         if(m_partialTickets[i] == ticket) return true;
+      }
+      if(pType == POSITION_TYPE_BUY && sl >= openPrice) return true;
+      if(pType == POSITION_TYPE_SELL && sl > 0 && sl <= openPrice) return true;
+      return false;
+   }
+
+   void MarkTicketPartiallyClosed(ulong ticket) {
+      int sz = ArraySize(m_partialTickets);
+      ArrayResize(m_partialTickets, sz + 1);
+      m_partialTickets[sz] = ticket;
+   }
 
 public:
    CExecutionEngine() : m_magic(202610), m_maxDeviation(20) {}
@@ -28,6 +44,7 @@ public:
       m_maxDeviation = deviation;
       m_trade.SetExpertMagicNumber(m_magic);
       m_trade.SetDeviationInPoints(m_maxDeviation);
+      ArrayResize(m_partialTickets, 0);
       Print("[ExecutionEngine] Khởi tạo. Magic: ", magic, " | Deviation: ", deviation, " pts");
    }
 
@@ -38,6 +55,9 @@ public:
          return false;
       }
 
+      ulong orderMagic = (sig.magic > 0) ? sig.magic : m_magic;
+      m_trade.SetExpertMagicNumber(orderMagic);
+
       int    digits = (int)SymbolInfoInteger(sig.symbol, SYMBOL_DIGITS);
       double price  = (sig.type == SIGNAL_BUY) ? GetAsk(sig.symbol) : GetBid(sig.symbol);
       double sl     = NormalizeDouble(sig.stopLoss,   digits);
@@ -46,7 +66,7 @@ public:
       m_trade.SetTypeFillingBySymbol(sig.symbol);
 
       bool ok = false;
-      string comment = StringFormat("EA|%s|%.2f", sig.strategyName, sig.confidence);
+      string comment = StringFormat("%s|m:%I64u", sig.strategyName, orderMagic);
 
       if(sig.type == SIGNAL_BUY) {
          ok = m_trade.Buy(volume, sig.symbol, price, sl, tp, comment);
@@ -55,8 +75,8 @@ public:
       }
 
       if(ok) {
-         PrintFormat("[EXEC] ✅ %s %s %.2f lot | Entry: %.5f | SL: %.5f | TP1: %.5f | Confidence: %.0f%%",
-                     (sig.type==SIGNAL_BUY?"BUY":"SELL"), sig.symbol, volume, price, sl, tp, sig.confidence*100);
+         PrintFormat("[EXEC] ✅ %s %s %.2f lot | Entry: %.5f | SL: %.5f | TP1: %.5f | Magic: %I64u",
+                     (sig.type==SIGNAL_BUY?"BUY":"SELL"), sig.symbol, volume, price, sl, tp, orderMagic);
       } else {
          PrintFormat("[EXEC ERROR] ❌ %s %s: Code %d - %s",
                      (sig.type==SIGNAL_BUY?"BUY":"SELL"), sig.symbol,
@@ -65,11 +85,15 @@ public:
       return ok;
    }
 
-   // Đóng 50% tại TP1, dời SL về hòa vốn (partial close strategy)
+   // Đóng 50% tại TP1, dời SL về hòa vốn (partial close strategy - chỉ đóng 1 lần)
    void ManagePartialClose(const string symbol, double tp1Distance = 0) {
       for(int i = PositionsTotal() - 1; i >= 0; i--) {
          if(!m_posInfo.SelectByIndex(i)) continue;
-         if(m_posInfo.Symbol() != symbol || m_posInfo.Magic() != m_magic) continue;
+         if(m_posInfo.Symbol() != symbol) continue;
+
+         // Chấp nhận magic mặc định hoặc magic của các chiến lược
+         ulong posMagic = m_posInfo.Magic();
+         if(posMagic != m_magic && (posMagic < 1001 || posMagic > 1004)) continue;
 
          double openPrice    = m_posInfo.PriceOpen();
          double currentPrice = m_posInfo.PriceCurrent();
@@ -78,24 +102,29 @@ public:
          double volume       = m_posInfo.Volume();
          ulong  ticket       = m_posInfo.Ticket();
          int    digits       = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+         ENUM_POSITION_TYPE pType = m_posInfo.PositionType();
+
+         // Kiểm tra nếu lệnh này đã từng partial close hoặc đã dời SL về BE rồi thì bỏ qua
+         if(IsAlreadyPartiallyClosed(ticket, pType, openPrice, sl)) continue;
 
          // Tính khoảng cách TP1: 0.7R–1R
          double targetDist = (tp1Distance > 0) ? tp1Distance : MathAbs(openPrice - sl) * 0.85;
          bool   atTP1      = false;
 
-         if(m_posInfo.PositionType() == POSITION_TYPE_BUY && currentPrice >= openPrice + targetDist) atTP1 = true;
-         if(m_posInfo.PositionType() == POSITION_TYPE_SELL && currentPrice <= openPrice - targetDist) atTP1 = true;
+         if(pType == POSITION_TYPE_BUY && currentPrice >= openPrice + targetDist)  atTP1 = true;
+         if(pType == POSITION_TYPE_SELL && currentPrice <= openPrice - targetDist) atTP1 = true;
 
-         // Chỉ đóng 50% một lần - dùng comment để đánh dấu
-         if(atTP1 && StringFind(m_posInfo.Comment(), "PARTIAL") < 0) {
+         // Chỉ đóng 50% một lần duy nhất
+         if(atTP1) {
             double minLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
             double halfLot = NormalizeDouble(volume * 0.5, 2);
             if(halfLot < minLot) halfLot = volume;
 
             if(m_trade.PositionClosePartial(ticket, halfLot)) {
+               MarkTicketPartiallyClosed(ticket);
                // Dời SL về hòa vốn + 2 pts
                double newSl = NormalizeDouble(openPrice + 2 * SymbolInfoDouble(symbol, SYMBOL_POINT)
-                              * (m_posInfo.PositionType()==POSITION_TYPE_BUY ? 1 : -1), digits);
+                              * (pType == POSITION_TYPE_BUY ? 1 : -1), digits);
                m_trade.PositionModify(ticket, newSl, tp);
                PrintFormat("[EXEC] Partial close 50%% %s #%I64u. SL dời về %.5f (hòa vốn+2pt)", symbol, ticket, newSl);
             }

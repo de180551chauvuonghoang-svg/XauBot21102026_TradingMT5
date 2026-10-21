@@ -1,0 +1,43 @@
+# config/strategies.yaml
+# Cấu hình chi tiết các chiến lược giao dịch trong MultiAssetEA v2
+
+strategies:
+  # 1. Trend Follower Strategy (EMA đa khung + ADX xác nhận xu hướng)
+  trend_follower:
+    enabled: true
+    magic: 1001
+    timeframe: H1
+    ema_fast: 21
+    ema_slow: 50
+    ema_trend_h4: 200
+    adx_min: 25.0
+    atr_sl_multiplier: 1.5
+    min_rr_ratio: 2.0
+    partial_tp1_ratio: 0.7  # Chốt 50% tại 0.7-1R
+
+  # 2. Session Breakout Strategy (Breakout biên phiên Á - London/NY Open)
+  session_breakout:
+    enabled: true
+    magic: 1002
+    timeframe: M15
+    asian_session_utc: [0, 7]
+    london_open_utc: [7, 9]
+    ny_open_utc: [13, 15]
+    min_range_pips: 15.0
+    max_range_pips: 80.0
+    atr_expansion_min: 1.2
+    min_rr_ratio: 1.5
+
+  # 3. Mean Reversion Strategy (RSI + Bollinger Bands trong Sideway Range)
+  mean_reversion:
+    enabled: true
+    magic: 1003
+    timeframe: H1
+    rsi_period: 14
+    rsi_oversold: 30.0
+    rsi_overbought: 70.0
+    bollinger_period: 20
+    bollinger_dev: 2.0
+    adx_max: 20.0        # Bắt buộc ADX < 20 để tránh bắt đỉnh đáy trong trend
+    atr_sl_multiplier: 1.5
+    min_rr_ratio: 1.33   # R:R tối thiểu để có kỳ vọng dương

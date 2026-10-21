@@ -7,10 +7,11 @@
 .env
 *.env
 .env.*
-!.env.example        # CHỈ cho phép .env.example lên git
+# Cho phép .env.example lên git
+!.env.example
 
-# ===== MT5 / MQL5 =====
-*.ex5                # Compiled EA binary
+# Compiled EA binary
+*.ex5
 *.ex4
 *.log
 MQL5/Logs/

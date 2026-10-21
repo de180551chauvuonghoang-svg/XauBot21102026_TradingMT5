@@ -89,17 +89,24 @@ def main():
             return
 
     try:
-        # Import các module (sẽ hoạt động sau khi cài đặt đủ dependencies)
+        # Import các module
         from agents.research  import ResearchAgent
         from agents.macro     import MacroAnalyst
         from agents.quant     import QuantAnalyst
         from agents.head_trader import HeadTrader
         from risk.risk_officer  import RiskOfficer
         from bridge.mt5_bridge  import MT5Bridge
+        from bridge.mt5_session import MT5Session
         from data.calendar      import EconomicCalendar
 
         config_path = Path(args.config)
         logger.info(f"Đọc config từ: {config_path.resolve()}")
+
+        # P0 FIX: Khởi tạo kết nối MT5 API cho Brain
+        session = MT5Session()
+        session_connected = session.connect()
+        if not session_connected:
+            logger.warning("Chưa kết nối trực tiếp MT5 Python API. Brain sẽ hoạt động qua FILE_COMMON bridge với MT5 EA.")
 
         # --- Khởi tạo các thành phần
         bridge    = MT5Bridge(config_path)
@@ -112,34 +119,55 @@ def main():
 
         logger.info("Tất cả agents đã khởi động. Bắt đầu vòng lặp chính...")
 
+        # Cache phân tích tin tức để tiết kiệm quota LLM (15 phút cập nhật 1 lần)
+        cached_news_summary = None
+        cached_macro_bias   = None
+        last_llm_analysis   = 0
+        LLM_REFRESH_INTERVAL = 900  # 15 phút (900 giây)
+
         # --- Vòng lặp chính
         cycle = 0
         while True:
             cycle += 1
+            now_ts = time.time()
             logger.debug(f"--- Chu kỳ #{cycle} ---")
 
             try:
                 # 1. Cập nhật heartbeat cho MT5 EA
                 bridge.send_heartbeat()
 
-                # 2. Kiểm tra tin tức sắp ra (gửi blackout list sang EA)
+                # 2. Đọc trạng thái tài khoản thực tế từ MT5 EA (P0 FIX)
+                account_state = bridge.read_account_state() or {
+                    "daily_loss_pct": 0.0,
+                    "weekly_loss_pct": 0.0,
+                    "total_dd_pct": 0.0,
+                    "equity": 10000.0,
+                    "balance": 10000.0,
+                }
+
+                # 3. Kiểm tra tin tức sắp ra (gửi blackout list sang EA)
                 upcoming_news = calendar.get_upcoming_high_impact(minutes_ahead=60)
                 if upcoming_news:
                     bridge.send_news_blackout(upcoming_news)
                     logger.info(f"News blackout: {[n['name'] for n in upcoming_news]}")
 
-                # 3. Nghiên cứu thị trường
-                news_summary   = research.fetch_and_summarize()
-                macro_bias     = macro.analyze(news_summary)
-                quant_signals  = quant.generate_signals()
+                # 4. Nghiên cứu thị trường & LLM (chạy mỗi 15 phút để tiết kiệm quota Groq)
+                if cached_news_summary is None or (now_ts - last_llm_analysis >= LLM_REFRESH_INTERVAL):
+                    logger.info("Cập nhật phân tích tin tức mới từ 4 nguồn qua Groq LLM...")
+                    cached_news_summary = research.fetch_and_summarize()
+                    cached_macro_bias   = macro.analyze(cached_news_summary)
+                    last_llm_analysis   = now_ts
 
-                # 4. Tổng hợp và ra quyết định
-                approved = head.decide(macro_bias, quant_signals, news_summary)
+                # 5. Phân tích định lượng và sinh tín hiệu kỹ thuật
+                quant_signals = quant.generate_signals()
 
-                # 5. Gửi lệnh đã duyệt sang MT5
+                # 6. Tổng hợp và ra quyết định (đối chiếu vĩ mô + rủi ro thật)
+                approved = head.decide(cached_macro_bias, quant_signals, cached_news_summary, account_state)
+
+                # 7. Gửi lệnh đã duyệt sang MT5 qua FILE_COMMON
                 for signal in approved:
                     bridge.send_signal(signal)
-                    logger.info(f"Gửi tín hiệu: {signal}")
+                    logger.info(f"Gửi tín hiệu duyệt sang MT5: {signal}")
 
             except KeyboardInterrupt:
                 raise
@@ -154,10 +182,9 @@ def main():
             time.sleep(60)
 
     except ImportError as e:
-        logger.warning(f"Chưa cài đủ dependencies hoặc module chưa được implement: {e}")
-        logger.info("Brain đang chạy ở chế độ STUB (chỉ gửi heartbeat sang MT5 EA)")
-        logger.info("MT5 EA sẽ tự giao dịch độc lập theo chiến lược MQL5 nội tại.")
-        _run_heartbeat_only_mode()
+        logger.critical(f"❌ [LỖI NGHIÊM TRỌNG] Thiếu thư viện hoặc module: {e}")
+        logger.critical("Vui lòng chạy: pip install -r requirements.txt để cài đặt đầy đủ các gói cần thiết.")
+        sys.exit(1)
 
     except KeyboardInterrupt:
         logger.info("Nhận Ctrl+C - dừng Brain gracefully.")

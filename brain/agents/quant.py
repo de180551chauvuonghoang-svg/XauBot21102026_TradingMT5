@@ -8,6 +8,7 @@ Xác định trạng thái thị trường (Market Regime):
 - VOLATILE BẤT THƯỜNG: Đứng ngoài (Stand Aside)
 """
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Any
 import yaml
@@ -29,6 +30,8 @@ class QuantAnalyst:
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self.symbols_config = self._load_symbols_config()
+        self._last_signal_time: Dict[str, float] = {}
+        self.signal_debounce_sec = 900  # 15 phút chống lặp tín hiệu
         logger.info(f"QuantAnalyst sẵn sàng: Theo dõi kỹ thuật {len(self.symbols_config)} symbols.")
 
     def _load_symbols_config(self) -> List[Dict[str, Any]]:
@@ -59,6 +62,11 @@ class QuantAnalyst:
         Phân tích kỹ thuật và phát hiện regime cho symbol.
         Nếu MT5 đang kết nối, lấy nến M15/H1 thật để tính toán.
         """
+        now = time.time()
+        # Chống lặp tín hiệu: Mỗi symbol chỉ phát tín hiệu 1 lần trong 15 phút
+        if now - self._last_signal_time.get(symbol, 0) < self.signal_debounce_sec:
+            return None
+
         if MT5_AVAILABLE and mt5.terminal_info() is not None:
             # Lấy giá tick hiện tại
             tick = mt5.symbol_info_tick(symbol)
@@ -67,9 +75,10 @@ class QuantAnalyst:
 
             ask = tick.ask
             bid = tick.bid
-            spread_points = (ask - bid)
+            if ask <= 0 or bid <= 0:
+                return None
 
-            # Lấy 100 nến M15 để tính regime cơ bản
+            # Lấy 50 nến M15 để tính regime cơ bản
             rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 50)
             if rates is not None and len(rates) >= 30:
                 closes = [r[4] for r in rates]
@@ -79,13 +88,17 @@ class QuantAnalyst:
                 # Đo độ lệch chuẩn cho Mean Reversion
                 variance = sum((c - sma20) ** 2 for c in closes[-20:]) / 20.0
                 std = variance ** 0.5
-                upper_bb = sma20 + 2 * std
-                lower_bb = sma20 - 2 * std
+                if std <= 0:
+                    return None
 
-                # Tín hiệu Mean Reversion tại biên Bollinger Bands
+                upper_bb = sma20 + 2.0 * std
+                lower_bb = sma20 - 2.0 * std
+
+                # P1 FIX: Đặt SL = 1.5 * std và TP = sma20 (~2 * std) để đạt R:R >= 1.33
                 if current_price <= lower_bb and bid > 0:
-                    sl = bid - 3 * std
+                    sl = bid - 1.5 * std
                     tp = sma20
+                    self._last_signal_time[symbol] = now
                     return {
                         "symbol": symbol,
                         "action": "BUY",
@@ -97,8 +110,9 @@ class QuantAnalyst:
                         "confidence": 70,
                     }
                 elif current_price >= upper_bb and ask > 0:
-                    sl = ask + 3 * std
+                    sl = ask + 1.5 * std
                     tp = sma20
+                    self._last_signal_time[symbol] = now
                     return {
                         "symbol": symbol,
                         "action": "SELL",

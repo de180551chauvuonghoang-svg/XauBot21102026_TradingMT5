@@ -27,9 +27,9 @@ private:
    bool     m_brokeUp;
    bool     m_brokeDn;
 
-   // Kiểm tra đang trong cửa sổ phiên breakout
+   // Kiểm tra đang trong cửa sổ phiên breakout theo chuẩn giờ UTC
    bool IsBreakoutWindow() {
-      MqlDateTime dt; TimeToStruct(TimeCurrent(), dt);
+      MqlDateTime dt; TimeToStruct(TimeGMT(), dt);
       int h = dt.hour, m = dt.min;
       // London open: 07:00-09:30 UTC
       bool london = (h == 7 || h == 8 || (h == 9 && m <= 30));
@@ -38,19 +38,24 @@ private:
       return london || ny;
    }
 
-   // Tính vùng range phiên Á (00:00-07:00 UTC) cho ngày hiện tại
+   // Tính vùng range phiên Á (00:00-07:00 UTC) cho ngày hiện tại (quy đổi theo giờ server)
    void CalcAsianRange() {
-      MqlDateTime dt; TimeToStruct(TimeCurrent(), dt);
-      datetime today = StringToTime(StringFormat("%04d.%02d.%02d 00:00", dt.year, dt.mon, dt.day));
+      datetime gmtNow = TimeGMT();
+      datetime srvNow = TimeCurrent();
+      int brokerOffset = (int)(srvNow - gmtNow);
 
-      if(m_rangeDate == today) return;  // Đã tính hôm nay rồi
+      MqlDateTime dt; TimeToStruct(gmtNow, dt);
+      datetime gmtMidnight = StringToTime(StringFormat("%04d.%02d.%02d 00:00", dt.year, dt.mon, dt.day));
+
+      if(m_rangeDate == gmtMidnight) return;  // Đã tính hôm nay rồi
 
       m_asianHigh = 0; m_asianLow = 0;
-      datetime asianEnd = today + 7 * 3600; // 07:00 UTC
+      datetime asianStartServer = gmtMidnight + brokerOffset;
+      datetime asianEndServer   = gmtMidnight + 7 * 3600 + brokerOffset; // 07:00 UTC theo giờ broker
 
       // Lấy bars trong phiên Á
       MqlRates rates[];
-      int cnt = CopyRates(m_symbol, PERIOD_M15, today, asianEnd, rates);
+      int cnt = CopyRates(m_symbol, PERIOD_M15, asianStartServer, asianEndServer, rates);
       if(cnt < 5) return;
 
       m_asianHigh = rates[0].high;
@@ -60,7 +65,7 @@ private:
          if(rates[i].low  < m_asianLow)  m_asianLow  = rates[i].low;
       }
 
-      m_rangeDate = today;
+      m_rangeDate = gmtMidnight;
       m_brokeUp   = false;
       m_brokeDn   = false;
 
@@ -166,6 +171,7 @@ public:
       sig.confidence  = confidence;
       sig.signalTime  = TimeCurrent();
       sig.regime      = REGIME_BREAKOUT;
+      sig.magic       = MAGIC_SESSION_BREAKOUT;
       sig.comment     = StringFormat("Asian range %.1f pts breakout %s | ATR expansion: %s",
                                      rangePips, (signalType==SIGNAL_BUY?"UP":"DN"),
                                      (atrExpanded?"YES":"NO"));

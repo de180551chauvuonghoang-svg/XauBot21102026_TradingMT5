@@ -67,27 +67,32 @@ public:
       IndicatorRelease(adxH);
       if(adxBuf[0] > m_adxMax) return false;  // Đang trend, không dùng chiến lược này
 
-      // RSI
+      // RSI: Sử dụng ArraySetAsSeries để rsiBuf[0] là nến vừa đóng (bar 1), rsiBuf[1] là nến trước (bar 2)
       double rsiBuf[];
+      ArraySetAsSeries(rsiBuf, true);
       int rsiH = iRSI(m_symbol, m_tf, m_rsiPeriod, PRICE_CLOSE);
       if(rsiH == INVALID_HANDLE) return false;
-      if(CopyBuffer(rsiH, 0, 0, 2, rsiBuf) < 2) { IndicatorRelease(rsiH); return false; }
+      if(CopyBuffer(rsiH, 0, 1, 2, rsiBuf) < 2) { IndicatorRelease(rsiH); return false; }
       IndicatorRelease(rsiH);
-      double rsi0 = rsiBuf[0]; // Nến hiện tại
-      double rsi1 = rsiBuf[1]; // Nến trước
+      double rsi1 = rsiBuf[0]; // Nến đã đóng (shift 1)
+      double rsi2 = rsiBuf[1]; // Nến trước đó (shift 2)
 
-      // Bollinger Bands
+      // Bollinger Bands: Lấy theo nến đã đóng (shift 1)
       double bbUpper[], bbLower[], bbMid[];
+      ArraySetAsSeries(bbUpper, true);
+      ArraySetAsSeries(bbLower, true);
+      ArraySetAsSeries(bbMid, true);
       int bbH = iBands(m_symbol, m_tf, m_bbPeriod, 0, m_bbDeviation, PRICE_CLOSE);
       if(bbH == INVALID_HANDLE) return false;
-      bool bbOk = (CopyBuffer(bbH, 1, 0, 1, bbUpper) >= 1 &&
-                   CopyBuffer(bbH, 2, 0, 1, bbLower) >= 1 &&
-                   CopyBuffer(bbH, 0, 0, 1, bbMid)   >= 1);
+      bool bbOk = (CopyBuffer(bbH, 1, 1, 1, bbUpper) >= 1 &&
+                   CopyBuffer(bbH, 2, 1, 1, bbLower) >= 1 &&
+                   CopyBuffer(bbH, 0, 1, 1, bbMid)   >= 1);
       IndicatorRelease(bbH);
       if(!bbOk) return false;
 
-      double close  = iClose(m_symbol, m_tf, 0);
-      double atr    = GetATR(14, 0);
+      // P1 FIX: Đánh giá tín hiệu trên nến đã hoàn thành (shift 1) để triệt tiêu repaint
+      double close1 = iClose(m_symbol, m_tf, 1);
+      double atr    = GetATR(14, 1);
       int    digits = (int)SymbolInfoInteger(m_symbol, SYMBOL_DIGITS);
       double point  = SymbolInfoDouble(m_symbol, SYMBOL_POINT);
 
@@ -95,21 +100,20 @@ public:
       double confidence = 0.0;
       double sl = 0, tp1 = 0, tp2 = 0;
 
-      // BUY: RSI quá bán + giá chạm/phá dưới BB lower → bắt đảo chiều
-      bool buyCondition  = (rsi1 < m_rsiOversold && rsi0 > rsi1 && close < bbLower[0] + atr * 0.3);
-      // SELL: RSI quá mua + giá chạm/phá trên BB upper → bắt đảo chiều
-      bool sellCondition = (rsi1 > m_rsiOverbought && rsi0 < rsi1 && close > bbUpper[0] - atr * 0.3);
+      // BUY: Nến trước quá bán, nến này RSI ngóc lên + giá đóng dưới/sát dải BB dưới -> Đảo chiều
+      bool buyCondition  = (rsi2 < m_rsiOversold && rsi1 > rsi2 && close1 < bbLower[0] + atr * 0.3);
+      // SELL: Nến trước quá mua, nến này RSI quay xuống + giá đóng trên/sát dải BB trên -> Đảo chiều
+      bool sellCondition = (rsi2 > m_rsiOverbought && rsi1 < rsi2 && close1 > bbUpper[0] - atr * 0.3);
 
       if(buyCondition) {
          signalType = SIGNAL_BUY;
-         sl         = NormalizeDouble(close - atr * m_atrSlMult, digits);
-         // TP1 về BB middle (mean = dải giữa), TP2 về BB upper
+         sl         = NormalizeDouble(close1 - atr * m_atrSlMult, digits);
          tp1        = NormalizeDouble(bbMid[0], digits);
          tp2        = NormalizeDouble(bbUpper[0], digits);
-         confidence = 0.60 + (rsi1 < 25 ? 0.1 : 0.0);  // RSI cực thấp → confidence cao hơn
+         confidence = 0.60 + (rsi1 < 25 ? 0.1 : 0.0);
       } else if(sellCondition) {
          signalType = SIGNAL_SELL;
-         sl         = NormalizeDouble(close + atr * m_atrSlMult, digits);
+         sl         = NormalizeDouble(close1 + atr * m_atrSlMult, digits);
          tp1        = NormalizeDouble(bbMid[0], digits);
          tp2        = NormalizeDouble(bbLower[0], digits);
          confidence = 0.60 + (rsi1 > 75 ? 0.1 : 0.0);
@@ -117,17 +121,20 @@ public:
 
       if(signalType == SIGNAL_NONE || confidence < 0.6) return false;
 
-      // Kiểm tra R:R
-      double slDist = MathAbs(close - sl);
-      double tpDist = MathAbs(tp1 - close);
+      // Kiểm tra R:R tối thiểu
+      double slDist = MathAbs(close1 - sl);
+      double tpDist = MathAbs(tp1 - close1);
       if(slDist <= 0 || tpDist / slDist < m_rrRatio) return false;
 
       sig.type        = signalType;
-      sig.entryPrice  = close;
+      sig.entryPrice  = close1;
       sig.stopLoss    = sl;
       sig.takeProfit1 = tp1;
       sig.takeProfit2 = tp2;
       sig.confidence  = confidence;
+      sig.signalTime  = lastBar[0];
+      sig.magic       = MAGIC_MEAN_REVERSION;
+      m_lastSignalTime = lastBar[0];
       sig.signalTime  = lastBar[0];
       sig.regime      = REGIME_RANGE;
       sig.comment     = StringFormat("RSI=%.1f BB touch | ADX=%.1f (sideway)", rsi1, adxBuf[0]);

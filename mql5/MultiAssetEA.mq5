@@ -16,6 +16,7 @@
 #include "Include\Core\SafetyGuard.mqh"
 #include "Include\Core\PortfolioManager.mqh"
 #include "Include\Core\TelegramNotifier.mqh"
+#include "Include\Core\BridgeReader.mqh"
 #include "Include\Strategies\TrendFollowerStrategy.mqh"
 #include "Include\Strategies\SessionBreakoutStrategy.mqh"
 #include "Include\Strategies\MeanReversionStrategy.mqh"
@@ -67,9 +68,9 @@ input string InpTelegramToken = "";    // Bot Token (lấy từ @BotFather)
 input string InpTelegramChatId= "";    // Chat ID
 input bool   InpTelegramEnabled= true; // Bật thông báo Telegram
 
-input group "=== AN TOÀN ==="
-input bool   InpHeartbeatEnabled = false; // Bật kiểm tra heartbeat Python Brain
-input int    InpHeartbeatTimeout = 30;    // Timeout heartbeat (giây)
+input group "=== AN TOÀN & PYTHON BRAIN BRIDGE ==="
+input bool   InpHeartbeatEnabled = true;  // Bật kiểm tra heartbeat Python Brain
+input int    InpHeartbeatTimeout = 180;   // Timeout heartbeat (giây)
 
 //=== GLOBAL OBJECTS ===================================================
 
@@ -78,6 +79,7 @@ CExecutionEngine     g_exec;
 CSafetyGuard         g_safety;
 CPortfolioManager    g_portfolio;
 CTelegramNotifier    g_telegram;
+CBridgeReader        g_bridge;
 
 // Mảng chiến lược: 3 chiến lược × N symbols
 CTrendFollowerStrategy    *g_trends[];
@@ -167,37 +169,44 @@ void OnDeinit(const int reason) {
 //| OnTick - Hàm chính, gọi mỗi tick                                |
 //+------------------------------------------------------------------+
 void OnTick() {
-   // 1. Kiểm tra an toàn hệ thống (kill-switch, heartbeat)
-   if(!g_safety.IsSystemOperational()) {
-      static datetime lastWarn = 0;
-      if(TimeCurrent() - lastWarn > 60) {
-         Print("[SAFETY] Hệ thống không an toàn - dừng mọi hoạt động mới.");
-         lastWarn = TimeCurrent();
-      }
-      return;
+   // 1. Kiểm tra Kill Switch và Heartbeat từ Python Brain qua Bridge
+   if(g_bridge.CheckKillSwitch(g_risk, g_exec)) {
+      return; // Hệ thống đã dừng khẩn cấp
+   }
+
+   if(InpHeartbeatEnabled) {
+      g_bridge.CheckHeartbeat(InpHeartbeatTimeout);
    }
 
    // 2. Kiểm tra Risk Officer (Daily/Weekly/Total DD)
    if(!g_risk.CheckAllLimits()) {
-      if(!g_risk.IsHalted()) return; // Đã log trong CheckAllLimits
+      if(!g_risk.IsHalted()) return;
       static datetime lastHaltMsg = 0;
       if(TimeCurrent() - lastHaltMsg > 300) {
-         g_telegram.NotifyHalt("Circuit Breaker kích hoạt - giới hạn DD bị chạm");
+         g_telegram.NotifyHalt("Circuit Breaker kích hoạt - giới hạn DD chạm ngưỡng");
          lastHaltMsg = TimeCurrent();
       }
       return;
    }
 
-   // 3. Báo cáo hàng ngày (một lần vào đầu giờ)
+   // 3. Cập nhật Account State sang FILE_COMMON cho Python Brain & Risk Officer đọc
+   double startEq = g_risk.GetDailyStartingEquity();
+   double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double dailyDD = (startEq > 0) ? (startEq - equity) / startEq * 100.0 : 0.0;
+   double totalDD = (balance > 0) ? (balance - equity) / balance * 100.0 : 0.0;
+   g_bridge.WriteAccountState(dailyDD, 0.0, totalDD);
+
+   // 4. Báo cáo hàng ngày (một lần vào đầu giờ)
    SendDailyReportIfNeeded();
 
-   // 4. Heartbeat notify mỗi 4 giờ
+   // 5. Heartbeat notify mỗi 4 giờ
    if(TimeCurrent() - g_lastHeartbeatNotify > 14400) {
       g_telegram.NotifyHeartbeat("OK");
       g_lastHeartbeatNotify = TimeCurrent();
    }
 
-   // 5. Quản lý trailing và partial close cho các vị thế hiện có
+   // 6. Quản lý trailing và partial close cho các vị thế hiện có
    int n = g_portfolio.GetSymCount();
    for(int i = 0; i < n; i++) {
       string sym = g_portfolio.GetSymbol(i);
@@ -205,16 +214,25 @@ void OnTick() {
       g_exec.ApplyAtrTrailing(sym, InpTF, InpTrailAtrMult);
    }
 
-   // 6. Quét tín hiệu và mở lệnh mới
+   // 7. Xử lý tín hiệu đến từ Python Brain nếu có
+   g_bridge.ProcessBrainSignals(g_risk, g_exec, InpSymbols);
+
+   // 8. Quét tín hiệu và mở lệnh nội tại (MQL5 Strategies)
    for(int i = 0; i < n; i++) {
       string sym = g_portfolio.GetSymbol(i);
 
       // Kiểm tra phiên giao dịch
       if(!g_safety.IsTradingSessionActive(sym)) continue;
 
-      // Kiểm tra news blackout (placeholder - Python Brain sẽ cập nhật qua Bridge)
-      string emptyArr[]; // Trong chế độ standalone, bỏ qua news filter
-      // if(g_safety.IsInNewsBlackout(emptyArr)) continue;
+      // P0 FIX: Kiểm tra News Blackout từ Python Brain thực tế
+      if(g_bridge.CheckNewsBlackout()) {
+         static datetime lastNewsWarn = 0;
+         if(TimeCurrent() - lastNewsWarn > 300) {
+            PrintFormat("[SAFETY] %s: Đang trong thời gian News Blackout quanh tin tức lớn. Tạm dừng mở lệnh.", sym);
+            lastNewsWarn = TimeCurrent();
+         }
+         continue;
+      }
 
       // Kiểm tra spread
       if(!g_risk.IsSpreadOk(sym, InpTF)) continue;
@@ -266,26 +284,33 @@ void OnTick() {
 //+------------------------------------------------------------------+
 //| OnTradeTransaction - Theo dõi kết quả giao dịch                 |
 //+------------------------------------------------------------------+
+//| OnTradeTransaction - Theo dõi kết quả giao dịch (P0 FIX)         |
+//+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &req,
                         const MqlTradeResult &result) {
+   // Chỉ xử lý sự kiện deal được thêm vào history
    if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
-   if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL) return; // Bỏ qua lệnh mở
+   if(trans.deal == 0) return;
 
-   // Chỉ xử lý khi đóng lệnh
+   // P0 FIX: Kiểm tra DEAL_ENTRY_OUT hoặc DEAL_ENTRY_INOUT (chính xác các deal đóng lệnh)
    if(HistoryDealSelect(trans.deal)) {
-      double profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
-      ulong  magic  = (ulong)HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
-      if(magic != InpMagic) return;
+      ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_INOUT) return;
 
+      ulong magic = (ulong)HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
+      // Kiểm tra deal thuộc EA này hoặc các chiến lược con của EA
+      if(magic != InpMagic && (magic < 1001 || magic > 1004)) return;
+
+      double profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
       bool isWin = (profit > 0);
       g_dailyPnL += profit;
 
+      // Kích hoạt giảm size sau chuỗi thua
       g_risk.OnTradeResult(isWin);
       if(isWin) g_winTrades++;
 
       double winRate = (g_totalTrades > 0) ? (double)g_winTrades / g_totalTrades * 100.0 : 0.0;
-      double pf      = (g_dailyPnL >= 0) ? 99.0 : 0.0; // Simplified
 
       g_telegram.NotifyOrderClose(
          HistoryDealGetString(trans.deal, DEAL_SYMBOL),

@@ -27,12 +27,13 @@ class RiskOfficer:
         self.max_daily_loss    = cfg["max_daily_loss_pct"]
         self.max_weekly_loss   = cfg["max_weekly_loss_pct"]
         self.max_total_dd      = cfg["max_total_drawdown_pct"]
-        self.kelly_cap         = cfg["kelly_fraction_cap"]
-        self.news_blackout_min = cfg["news_blackout_minutes"]
-        self.max_slippage_pts  = cfg["max_slippage_points"]
-        self.require_hard_sl   = cfg["require_hard_sl"]
-        self.allow_martingale  = cfg["allow_martingale"]
-        self.allow_grid        = cfg["allow_grid"]
+        self.kelly_cap         = cfg.get("kelly_fraction_cap", 0.25)
+        raw_blackout           = cfg.get("news_blackout_minutes", 30)
+        self.news_blackout_min = raw_blackout.get("before", 30) if isinstance(raw_blackout, dict) else int(raw_blackout)
+        self.max_slippage_pts  = cfg.get("max_slippage_points", 20)
+        self.require_hard_sl   = cfg.get("require_hard_sl", True)
+        self.allow_martingale  = cfg.get("allow_martingale", False)
+        self.allow_grid        = cfg.get("allow_grid", False)
 
         # State
         self._halted           = False

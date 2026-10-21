@@ -33,6 +33,12 @@ enum ENUM_LOT_MODE {
    LOT_ATR_VOLATILITY= 2
 };
 
+//--- Magic numbers riêng biệt cho từng chiến lược
+#define MAGIC_TREND_FOLLOWER    1001
+#define MAGIC_SESSION_BREAKOUT  1002
+#define MAGIC_MEAN_REVERSION    1003
+#define MAGIC_BRAIN_AI          1004
+
 //--- Trade signal packet from Brain or strategy
 struct SignalPacket {
    string            symbol;
@@ -47,6 +53,7 @@ struct SignalPacket {
    string            strategyName;
    string            comment;
    datetime          signalTime;
+   ulong             magic;            // Magic number định danh chiến lược
 };
 
 //--- Account risk snapshot

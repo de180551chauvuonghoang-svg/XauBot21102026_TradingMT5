@@ -129,6 +129,7 @@ public:
       sig.signalTime  = lastBar[0];
       sig.comment     = StringFormat("EMA%d/%d cross | ADX=%.1f | ATR=%.5f", m_emaFast, m_emaSlow, adxBuf[0], atr);
       sig.regime      = REGIME_TREND;
+      sig.magic       = MAGIC_TREND_FOLLOWER;
 
       m_lastSignal     = signalType;
       m_lastSignalTime = lastBar[0];
