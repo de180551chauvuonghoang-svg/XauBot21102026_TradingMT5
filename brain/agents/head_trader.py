@@ -13,8 +13,12 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from risk.risk_officer import RiskOfficer
-from agents.bull_bear import BullAgent, BearAgent
+try:
+    from brain.risk.risk_officer import RiskOfficer
+    from brain.agents.bull_bear import BullAgent, BearAgent
+except (ImportError, ModuleNotFoundError):
+    from risk.risk_officer import RiskOfficer
+    from agents.bull_bear import BullAgent, BearAgent
 
 logger = logging.getLogger("HeadTrader")
 
